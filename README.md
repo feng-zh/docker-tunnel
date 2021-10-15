@@ -57,6 +57,8 @@ The remote server should have `socat` pre-installed to support UDP forward conve
 
 Only one UDP port forward supported. It can also include multiple TCP ports forward tunnel.
 
+Make sure `-i` option (enable input) is enabled in docker run command (or `stdin_open: true` in docker-compose.yml)
+
 ### SSH provides SOCKS proxy Server
 The socks proxy can supported as well
 ```shell

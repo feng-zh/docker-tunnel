@@ -50,6 +50,8 @@ _UDP_FORWARD_LOCAL=
 _LAST_ARG=
 _CMD_ARGS=
 
+echo "Include /etc/ssh/ssh_config" > /tmp/ssh_config
+
 while [ "$1" != "" ]; do
   _ARG=$1
   
@@ -64,10 +66,10 @@ while [ "$1" != "" ]; do
       _TUNNEL_SOCK_LOCAL=`mktemp -u -p ${XDG_RUNTIME_DIR:-/tmp} .tunnel-XXXXXXXXXX`.sock
       _TUNNEL_SOCK_REMOTE=`mktemp -u -p /tmp .tunnel-XXXXXXXXXX`.sock
       # Use option in /etc/ssh_config for workaround (same as Dockerfile did)
-      echo "LocalCommand socat UDP-RECVFROM:$_UDP_FORWARD_LOCAL,reuseaddr,fork UNIX-CONNECT:$_TUNNEL_SOCK_LOCAL &" >> /etc/ssh/ssh_config
-      echo "PermitLocalCommand yes" >> /etc/ssh/ssh_config
+      echo "LocalCommand socat UDP-LISTEN:$_UDP_FORWARD_LOCAL,reuseaddr,fork UNIX-CONNECT:$_TUNNEL_SOCK_LOCAL &" >> /tmp/ssh_config
+      echo "PermitLocalCommand yes" >> /tmp/ssh_config
       _ARG=$_TUNNEL_SOCK_LOCAL:$_TUNNEL_SOCK_REMOTE
-      _LAST_ARG="socat UNIX-LISTEN:$_TUNNEL_SOCK_REMOTE,fork udp:$_UDP_FORWARD_REMOTE & cat; kill -TERM \$!"
+      _LAST_ARG="socat UNIX-LISTEN:$_TUNNEL_SOCK_REMOTE,fork udp:$_UDP_FORWARD_REMOTE,reuseaddr & cat; kill -TERM \$!"
       NO_FORWARD_ONLY=true
     fi
     _CMD="$_CMD -L $_ARG"
@@ -87,17 +89,17 @@ if [ -n "$_LAST_ARG" ]; then
   _CMD_ARGS="$_CMD_ARGS $_LAST_ARG"
 fi
 
-_CMD="$_CMD $_CMD_ARGS"
-
 ## Enable ssh over socks5 proxy if Env SSH_SOCKS_PROXY set
 if [ -n "$SSH_SOCKS_PROXY" ]; then
   # -o ProxyCommand='socat - SOCKS:socks.example.com:%h:%p,socksport=1080' has issue in _CMD directly
   # Use option in /etc/ssh_config for workaround (same as Dockerfile did)
   _SOCKS_HOST=`echo ${SSH_SOCKS_PROXY} | grep -o "^[^:]*"`
   _SOCKS_PORT=`echo ${SSH_SOCKS_PROXY} | grep -o "[^:]*$"`
-  echo "ProxyCommand socat - SOCKS:$_SOCKS_HOST:%h:%p,socksport=$_SOCKS_PORT" >> /etc/ssh/ssh_config
+  echo "ProxyCommand socat - SOCKS:$_SOCKS_HOST:%h:%p,socksport=$_SOCKS_PORT" >> /tmp/ssh_config
   echo "Enable SSH over SOCKS Proxy ${SSH_SOCKS_PROXY}"
 fi
+
+_CMD="$_CMD -F /tmp/ssh_config $_CMD_ARGS"
 
 echo $_CMD
 exec $_CMD
