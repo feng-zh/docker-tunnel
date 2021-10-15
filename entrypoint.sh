@@ -21,11 +21,7 @@ if [ -n "$SSH_PASSWORD_FILE" ]; then
   fi
 fi
 
-if [ -z "$NO_FORWARD_ONLY" ]; then
-  _CMD="$_CMD ssh -NT"
-else
-  _CMD="$_CMD ssh -T"
-fi
+_CMD="$_CMD ssh -T"
 
 if [ -n "$SSH_KEY_FILE" ]; then
   if [ -e "$SSH_KEY_FILE" ]; then
@@ -50,22 +46,56 @@ if [ -n "$SOCKS_PORT" ]; then
   _CMD="$_CMD -D $SOCKS_PORT"
 fi
 
+_UDP_FORWARD_LOCAL=
+_LAST_ARG=
+_CMD_ARGS=
+
 while [ "$1" != "" ]; do
+  _ARG=$1
   
-  if [ -z "$NO_LOCAL_FORWARD" -a `echo $1 | grep -o ":" | wc -l` -eq "2" ]; then
-    _CMD="$_CMD -L"
+  if [ -z "$NO_LOCAL_FORWARD" -a `echo $_ARG | grep -o ":" | wc -l` -eq "2" ]; then
+    if [ -n "`echo $_ARG | grep -o -i "/udp$"`" ]; then
+      if [ -n "$_UDP_FORWARD_LOCAL" ]; then
+        echo "Only one UDP forward supported" 1>&2
+        exit 1
+      fi
+      _UDP_FORWARD_LOCAL=`echo $_ARG | grep -o "^[0-9]*:" | tr -d :`
+      _UDP_FORWARD_REMOTE=`echo $_ARG | sed 's/^[0-9]*://' | sed 's#/udp$##i'`
+      _TUNNEL_SOCK_LOCAL=`mktemp -u -p ${XDG_RUNTIME_DIR:-/tmp} .tunnel-XXXXXXXXXX`.sock
+      _TUNNEL_SOCK_REMOTE=`mktemp -u -p /tmp .tunnel-XXXXXXXXXX`.sock
+      # Use option in /etc/ssh_config for workaround (same as Dockerfile did)
+      echo "LocalCommand socat UDP-RECVFROM:$_UDP_FORWARD_LOCAL,reuseaddr,fork UNIX-CONNECT:$_TUNNEL_SOCK_LOCAL &" >> /etc/ssh/ssh_config
+      echo "PermitLocalCommand yes" >> /etc/ssh/ssh_config
+      _ARG=$_TUNNEL_SOCK_LOCAL:$_TUNNEL_SOCK_REMOTE
+      _LAST_ARG="socat UNIX-LISTEN:$_TUNNEL_SOCK_REMOTE,fork udp:$_UDP_FORWARD_REMOTE & cat; kill -TERM \$!"
+      NO_FORWARD_ONLY=true
+    fi
+    _CMD="$_CMD -L $_ARG"
+    _ARG=
   fi
 
-  _CMD="$_CMD $1"
+  _CMD_ARGS="$_CMD_ARGS $_ARG"
 
   shift
 done
 
+if [ -z "$NO_FORWARD_ONLY" ]; then
+  _CMD="$_CMD -N"
+fi
+
+if [ -n "$_LAST_ARG" ]; then
+  _CMD_ARGS="$_CMD_ARGS $_LAST_ARG"
+fi
+
+_CMD="$_CMD $_CMD_ARGS"
+
 ## Enable ssh over socks5 proxy if Env SSH_SOCKS_PROXY set
 if [ -n "$SSH_SOCKS_PROXY" ]; then
-  # -o ProxyCommand='/usr/bin/nc -x socks.example.com:1080 %h %p' has issue in _CMD directly
+  # -o ProxyCommand='socat - SOCKS:socks.example.com:%h:%p,socksport=1080' has issue in _CMD directly
   # Use option in /etc/ssh_config for workaround (same as Dockerfile did)
-  echo "ProxyCommand /usr/bin/nc -x ${SSH_SOCKS_PROXY} %h %p" >> /etc/ssh/ssh_config
+  _SOCKS_HOST=`echo ${SSH_SOCKS_PROXY} | grep -o "^[^:]*"`
+  _SOCKS_PORT=`echo ${SSH_SOCKS_PROXY} | grep -o "[^:]*$"`
+  echo "ProxyCommand socat - SOCKS:$_SOCKS_HOST:%h:%p,socksport=$_SOCKS_PORT" >> /etc/ssh/ssh_config
   echo "Enable SSH over SOCKS Proxy ${SSH_SOCKS_PROXY}"
 fi
 

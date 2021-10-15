@@ -2,6 +2,8 @@ Introduction
 -----
 This is the docker project to setup tunnel via ssh to jump-station server. This can support multiple forward tunnel and socks proxy.
 
+The Local UDP forward is supported if remote server has `socat` package installed.
+
 Usage
 -----
 Use different option to connect remote ssh server:
@@ -44,6 +46,16 @@ The multiple forward tunnel are suppored as following:
 $ docker run -it -p 443:443 -p 80:80 -e SSH_PASSWORD=remotepassword \
 > fengzhou/ssh-tunnel user@remoteserver 443:example.com:443 80:example.com:80
 ```
+
+### UDP local forward tunnel
+The UDP local forward tunnel is supported as following:
+```shell
+$ docker run -it -p 5353:53/udp -e SSH_PASSWORD=remotepassword \
+> fengzhou/ssh-tunnel user@remoteserver 5353:example.com:53/udp
+```
+The remote server should have `socat` pre-installed to support UDP forward converting.
+
+Only one UDP port forward supported. It can also include multiple TCP ports forward tunnel.
 
 ### SSH provides SOCKS proxy Server
 The socks proxy can supported as well

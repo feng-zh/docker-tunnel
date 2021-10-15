@@ -4,7 +4,7 @@ LABEL maintainer "Feng Zhou <feng.zh@gmail.com>"
 
 # Refer to https://github.com/iadknet/docker-ssh-client-light
 
-RUN apk update && apk add --no-cach openssh-client sshpass netcat-openbsd && \
+RUN apk update && apk add --no-cach openssh-client sshpass socat && \
     echo -e 'Host *\nUseRoaming no\nServerAliveInterval 60\nServerAliveCountMax 2\nStrictHostKeyChecking no\nUserKnownHostsFile /dev/null\nExitOnForwardFailure yes\nGatewayPorts true\nForwardAgent yes\nAddKeysToAgent yes' >> /etc/ssh/ssh_config
 
 ADD entrypoint.sh /
